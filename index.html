@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="zh-HK" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>智能待辦事項清單 (Smart Todo List)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        /* Prevent iOS Safari auto-zoom on input focus */
+        @media screen and (max-width: 768px) {
+            input[type="text"],
+            input[type="date"],
+            select,
+            textarea {
+                font-size: 16px !important;
+            }
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-full transition-colors duration-200 flex flex-col overflow-x-hidden">
+
+    <!-- Header Navigation -->
+    <header class="bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20 shadow-sm pt-[env(safe-area-inset-top)]">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2.5 sm:gap-3">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md flex-shrink-0">
+                    <i class="fa-solid font-bold fa-check-double text-lg sm:text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-tight">Smart Todo Tasker</h1>
+                    <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">自動順延與高效工作流</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <!-- Theme Toggle Button (Larger touch target) -->
+                <button id="themeToggleBtn" aria-label="切換深淺色模式" class="w-11 h-11 flex items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 active:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700 dark:active:bg-slate-600 transition">
+                    <i class="fa-solid fa-moon text-lg dark:hidden"></i>
+                    <i class="fa-solid fa-sun text-lg hidden dark:block text-amber-400"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-4xl mx-auto px-3.5 sm:px-6 py-5 sm:py-8 flex-1 w-full space-y-5 sm:space-y-6">
+
+        <!-- Banner Alert for Rollover Items -->
+        <div id="rolloverAlert" class="hidden bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3 text-amber-800 dark:text-amber-200 shadow-sm transition-all">
+            <i class="fa-solid fa-clock-rotate-left text-amber-500 text-lg mt-0.5 flex-shrink-0"></i>
+            <div class="flex-1 text-xs sm:text-sm leading-relaxed">
+                <span class="font-semibold">系統已自動為您順延任務！</span>
+                <span id="rolloverAlertCount">有 0 個未完成任務</span> 已過期，並已自動搬移至今天項目的頂部。
+            </div>
+            <button onclick="dismissRolloverAlert()" aria-label="關閉提示" class="p-1.5 -mr-1.5 -mt-1 text-amber-500 hover:text-amber-700 dark:hover:text-amber-300">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <!-- Dashboard Stats Card -->
+        <section class="bg-white dark:bg-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+            <div class="flex flex-row justify-between items-center gap-3 mb-3">
+                <div>
+                    <h2 class="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">今日進度總覽</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" id="currentDateStr">載入日期中...</p>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <span id="completionRatio" class="text-xl sm:text-2xl font-bold text-sky-600 dark:text-sky-400">0%</span>
+                    <span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 block" id="completionRatioText">已完成 0 / 0</span>
+                </div>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-100 dark:bg-slate-700 h-2.5 sm:h-3 rounded-full overflow-hidden">
+                <div id="progressBar" class="bg-gradient-to-r from-sky-500 to-indigo-600 h-full rounded-full transition-all duration-500 w-0"></div>
+            </div>
+        </section>
+
+        <!-- Task Input Form -->
+        <section class="bg-white dark:bg-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+                <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-circle-plus text-sky-500"></i> 新增待辦事項
+                </h2>
+                <!-- Mode Switcher: Single vs AI Batch (Touch optimized) -->
+                <div class="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl text-xs sm:text-sm font-medium w-full sm:w-auto">
+                    <button type="button" id="modeSingleBtn" onclick="switchInputMode('single')" class="flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 rounded-lg bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-sm transition text-center">
+                        單項新增
+                    </button>
+                    <button type="button" id="modeAiBtn" onclick="switchInputMode('ai')" class="flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-wand-magic-sparkles text-amber-500"></i> AI 一段話拆解
+                    </button>
+                </div>
+            </div>
+
+            <!-- Single Task Form (Responsive Grid for Mobile/Tablet/Desktop) -->
+            <form id="todoForm" class="space-y-3">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3">
+                    <!-- Task Title -->
+                    <div class="md:col-span-6">
+                        <input type="text" id="taskTitle" placeholder="輸入你要做的事項..." required 
+                            class="w-full h-11 px-3.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 transition">
+                    </div>
+                    
+                    <!-- Due Date & Submit Row on Mobile/Tablet -->
+                    <div class="md:col-span-6 flex gap-2">
+                        <input type="date" id="taskDueDate" required
+                            class="flex-1 h-11 px-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 transition min-w-0">
+                        
+                        <button type="submit" 
+                            class="h-11 px-5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-sky-500/20 flex items-center justify-center gap-2 transition whitespace-nowrap flex-shrink-0">
+                            <i class="fa-solid fa-plus"></i> 新增
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Priority & Category options (Full-width equal columns on mobile) -->
+                <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 pt-0.5 text-xs sm:text-sm">
+                    <!-- Priority Select -->
+                    <div class="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-50 dark:bg-slate-900 px-3 h-10 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <span class="text-slate-500 dark:text-slate-400 whitespace-nowrap">優先:</span>
+                        <select id="taskPriority" class="bg-transparent text-slate-700 dark:text-slate-300 font-medium focus:outline-none cursor-pointer w-full sm:w-auto text-right sm:text-left">
+                            <option value="Medium" class="dark:bg-slate-800">普通 (中)</option>
+                            <option value="High" class="dark:bg-slate-800">緊急 (高)</option>
+                            <option value="Low" class="dark:bg-slate-800">次要 (低)</option>
+                        </select>
+                    </div>
+
+                    <!-- Category Select -->
+                    <div class="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-50 dark:bg-slate-900 px-3 h-10 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <span class="text-slate-500 dark:text-slate-400 whitespace-nowrap">分類:</span>
+                        <select id="taskCategory" class="bg-transparent text-slate-700 dark:text-slate-300 font-medium focus:outline-none cursor-pointer w-full sm:w-auto text-right sm:text-left">
+                            <option value="個人" class="dark:bg-slate-800">👤 個人</option>
+                            <option value="工作" class="dark:bg-slate-800">💼 工作</option>
+                            <option value="學習" class="dark:bg-slate-800">📚 學習</option>
+                            <option value="健康" class="dark:bg-slate-800">🏃 健康</option>
+                            <option value="財務" class="dark:bg-slate-800">💰 財務</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+
+            <!-- AI Batch Input Section (Hidden by default) -->
+            <div id="aiInputSection" class="hidden space-y-3">
+                <textarea id="aiRawText" rows="3" placeholder="貼上或輸入一段說話，例如：「聽日下晝3點前要交設計稿比陳生，好趕嘅！另外記得交水電費，同埋星期六去超級市場買生果同牛奶。」" 
+                    class="w-full px-3.5 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"></textarea>
+                
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <span id="aiStatusMsg" class="text-xs text-slate-500 dark:text-slate-400">
+                        AI 會自動識別事項、推算日期及分類
+                    </span>
+                    <button type="button" id="aiAnalyzeBtn" onclick="analyzeTextWithAI()" 
+                        class="w-full sm:w-auto h-11 px-5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 active:opacity-90 text-white font-semibold text-sm rounded-xl shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> 開始分析事項
+                    </button>
+                </div>
+
+                <!-- AI Extracted Results Preview Box -->
+                <div id="aiPreviewContainer" class="hidden mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="text-xs sm:text-sm font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-list-check"></i> 請勾選你要加入的項目：
+                        </h3>
+                        <button type="button" onclick="toggleAllAiSuggestions()" class="text-xs text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 underline py-1 px-2">
+                            全選 / 取消
+                        </button>
+                    </div>
+                    
+                    <div id="aiSuggestionsList" class="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                        <!-- AI parsed items injected here -->
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:flex sm:justify-end gap-2 pt-2">
+                        <button type="button" onclick="cancelAiPreview()" class="h-10 px-4 rounded-xl text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                            取消
+                        </button>
+                        <button type="button" onclick="confirmAiSuggestions()" class="h-10 px-5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-check"></i> 加入所選 (<span id="selectedAiCount">0</span>)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Filters & Tabs Navigation -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 pb-3">
+            <!-- Filter Tabs (Equal width on mobile) -->
+            <div class="grid grid-cols-2 sm:flex items-center gap-2">
+                <button onclick="setTab('active')" id="tabActive" class="h-10 px-4 rounded-xl text-xs sm:text-sm font-semibold transition bg-sky-600 text-white shadow-sm flex items-center justify-center">
+                    進行中 <span id="activeBadge" class="ml-1.5 bg-white/20 px-2 py-0.5 rounded-full text-xs">0</span>
+                </button>
+                <button onclick="setTab('completed')" id="tabCompleted" class="h-10 px-4 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition flex items-center justify-center">
+                    已完成歷史 <span id="completedBadge" class="ml-1.5 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full text-xs">0</span>
+                </button>
+            </div>
+
+            <!-- Category Filter Dropdown -->
+            <div class="flex items-center justify-between sm:justify-end gap-2 bg-white dark:bg-slate-800 sm:bg-transparent px-3 sm:px-0 py-1.5 sm:py-0 rounded-xl border border-slate-200 dark:border-slate-700 sm:border-0">
+                <label for="filterCategory" class="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">篩選類別:</label>
+                <select id="filterCategory" onchange="render()" class="bg-transparent sm:bg-white sm:dark:bg-slate-800 sm:border sm:border-slate-200 sm:dark:border-slate-700 text-xs sm:text-sm rounded-xl px-2 sm:px-3 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none">
+                    <option value="ALL">全部類別</option>
+                    <option value="個人">👤 個人</option>
+                    <option value="工作">💼 工作</option>
+                    <option value="學習">📚 學習</option>
+                    <option value="健康">🏃 健康</option>
+                    <option value="財務">💰 財務</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Task List Area (2 columns on Tablet/Desktop landscape, 1 column on Mobile) -->
+        <section id="taskListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Dynamic task items will be inserted here -->
+        </section>
+
+        <!-- Empty State View -->
+        <div id="emptyState" class="hidden text-center py-12 px-4 bg-white dark:bg-slate-800 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+            <div class="w-16 h-16 bg-sky-50 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-3 text-sky-500 dark:text-sky-400 text-2xl">
+                <i class="fa-regular fa-clipboard"></i>
+            </div>
+            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-200 mb-1">目前沒有待辦事項</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">在上方新增一個新的任務吧！享受高效的一天。</p>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto py-6 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
+        <p>Smart Todo List &copy; 2026 - 專為專注與高效打造</p>
+    </footer>
+
+    <!-- JavaScript Core Logic -->
+    <script>
+        // Data Structure & Initial State
+        let todos = [];
+        let currentTab = 'active'; // 'active' or 'completed'
+        let aiExtractedTasks = []; // Stores temporary AI parsed suggestions
+
+        // DOM Elements
+        const todoForm = document.getElementById('todoForm');
+        const taskTitleInput = document.getElementById('taskTitle');
+        const taskDueDateInput = document.getElementById('taskDueDate');
+        const taskPriorityInput = document.getElementById('taskPriority');
+        const taskCategoryInput = document.getElementById('taskCategory');
+        const taskListContainer = document.getElementById('taskListContainer');
+        const emptyState = document.getElementById('emptyState');
+        const filterCategory = document.getElementById('filterCategory');
+        
+        const rolloverAlert = document.getElementById('rolloverAlert');
+        const rolloverAlertCount = document.getElementById('rolloverAlertCount');
+
+        // App Initialization
+        window.onload = function() {
+            // Set default date picker to Today
+            const today = getTodayFormatted();
+            taskDueDateInput.value = today;
+            document.getElementById('currentDateStr').innerText = getChineseFormattedDate();
+
+            // Load theme preference
+            initTheme();
+
+            // Load saved todos from LocalStorage
+            loadTodos();
+
+            // Check and handle Auto-Rollover tasks (Unfinished past tasks)
+            checkAndRolloverTasks();
+
+            // Initial Render
+            render();
+
+            // Set background interval to check for midnight rollover every minute
+            setInterval(checkAndRolloverTasks, 60000);
+        };
+
+        // Get Today's Date String in YYYY-MM-DD
+        function getTodayFormatted() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        // Formatted Date for Dashboard
+        function getChineseFormattedDate() {
+            const now = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+            return now.toLocaleDateString('zh-HK', options);
+        }
+
+        // Theme Initialization & Handler
+        function initTheme() {
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+
+            document.getElementById('themeToggleBtn').addEventListener('click', () => {
+                if (document.documentElement.classList.contains('dark')) {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.theme = 'light';
+                } else {
+                    document.documentElement.classList.add('dark');
+                    localStorage.theme = 'dark';
+                }
+            });
+        }
+
+        // Local Storage API Wrappers
+        function saveTodos() {
+            localStorage.setItem('smart_todos_data', JSON.stringify(todos));
+        }
+
+        function loadTodos() {
+            const data = localStorage.getItem('smart_todos_data');
+            if (data) {
+                try {
+                    todos = JSON.parse(data);
+                } catch(e) {
+                    todos = [];
+                }
+            } else {
+                // Default Mock Data for first-time users
+                const today = getTodayFormatted();
+                todos = [
+                    {
+                        id: 'demo-1',
+                        title: '完成智能 Todo List 網頁設計',
+                        dueDate: today,
+                        priority: 'High',
+                        category: '工作',
+                        isCompleted: true,
+                        completedAt: new Date().toISOString(),
+                        isRollover: false,
+                        createdAt: new Date().toISOString()
+                    },
+                    {
+                        id: 'demo-2',
+                        title: '運動 30 分鐘與伸展',
+                        dueDate: today,
+                        priority: 'Medium',
+                        category: '健康',
+                        isCompleted: false,
+                        isRollover: false,
+                        createdAt: new Date().toISOString()
+                    }
+                ];
+                saveTodos();
+            }
+        }
+
+        /**
+         * Core Requirement: Automatic Rollover Logic
+         * Moves uncompleted tasks from past dates to Today and places them at the TOP of the active list.
+         */
+        function checkAndRolloverTasks() {
+            const todayStr = getTodayFormatted();
+            let rolloverCount = 0;
+
+            todos.forEach(todo => {
+                // If the task is NOT completed AND its due date is earlier than today
+                if (!todo.isCompleted && todo.dueDate < todayStr) {
+                    todo.dueDate = todayStr;       // Move due date to Today
+                    todo.isRollover = true;         // Flag as Rollover item
+                    rolloverCount++;
+                }
+            });
+
+            if (rolloverCount > 0) {
+                saveTodos();
+                // Show notification banner
+                rolloverAlertCount.innerText = `有 ${rolloverCount} 個未完成任務`;
+                rolloverAlert.classList.remove('hidden');
+                render();
+            }
+        }
+
+        function dismissRolloverAlert() {
+            rolloverAlert.classList.add('hidden');
+        }
+
+        // Form Submit Listener (Add Task)
+        todoForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const title = taskTitleInput.value.trim();
+            const dueDate = taskDueDateInput.value;
+            const priority = taskPriorityInput.value;
+            const category = taskCategoryInput.value;
+
+            if (!title) return;
+
+            const newTodo = {
+                id: 'task_' + Date.now(),
+                title: title,
+                dueDate: dueDate,
+                priority: priority,
+                category: category,
+                isCompleted: false,
+                isRollover: false,
+                createdAt: new Date().toISOString()
+            };
+
+            todos.unshift(newTodo); // Add new item to front
+            saveTodos();
+            render();
+
+            // Reset Input Title
+            taskTitleInput.value = '';
+        });
+
+        // Toggle Task Completion State
+        function toggleTaskComplete(id) {
+            const task = todos.find(t => t.id === id);
+            if (task) {
+                task.isCompleted = !task.isCompleted;
+                if (task.isCompleted) {
+                    task.completedAt = new Date().toISOString();
+                } else {
+                    delete task.completedAt;
+                }
+                saveTodos();
+                render();
+            }
+        }
+
+        // Delete Task
+        function deleteTask(id) {
+            todos = todos.filter(t => t.id !== id);
+            saveTodos();
+            render();
+        }
+
+        // Change Active Tab View
+        function setTab(tab) {
+            currentTab = tab;
+            const tabActive = document.getElementById('tabActive');
+            const tabCompleted = document.getElementById('tabCompleted');
+
+            if (tab === 'active') {
+                tabActive.className = "h-10 px-4 rounded-xl text-xs sm:text-sm font-semibold transition bg-sky-600 text-white shadow-sm flex items-center justify-center";
+                tabCompleted.className = "h-10 px-4 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition flex items-center justify-center";
+            } else {
+                tabCompleted.className = "h-10 px-4 rounded-xl text-xs sm:text-sm font-semibold transition bg-sky-600 text-white shadow-sm flex items-center justify-center";
+                tabActive.className = "h-10 px-4 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition flex items-center justify-center";
+            }
+            render();
+        }
+
+        // Priority Badge Helper
+        function getPriorityBadgeHtml(priority) {
+            switch (priority) {
+                case 'High':
+                    return `<span class="bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-md text-[11px] font-semibold border border-red-200 dark:border-red-900">高優先</span>`;
+                case 'Low':
+                    return `<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-md text-[11px] font-semibold">低優先</span>`;
+                default:
+                    return `<span class="bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md text-[11px] font-semibold border border-blue-100 dark:border-blue-900">普通</span>`;
+            }
+        }
+
+        // Render UI Function
+        function render() {
+            const selectedCat = filterCategory.value;
+
+            // Update Progress Stats
+            const activeTasks = todos.filter(t => !t.isCompleted);
+            const completedTasks = todos.filter(t => t.isCompleted);
+            
+            document.getElementById('activeBadge').innerText = activeTasks.length;
+            document.getElementById('completedBadge').innerText = completedTasks.length;
+
+            const total = todos.length;
+            const completedCount = completedTasks.length;
+            const percentage = total === 0 ? 0 : Math.round((completedCount / total) * 100);
+
+            document.getElementById('completionRatio').innerText = `${percentage}%`;
+            document.getElementById('completionRatioText').innerText = `已完成 ${completedCount} / ${total} 個任務`;
+            document.getElementById('progressBar').style.width = `${percentage}%`;
+
+            // Filter Todos based on Tab & Selected Category
+            let displayList = todos.filter(t => {
+                const matchTab = currentTab === 'active' ? !t.isCompleted : t.isCompleted;
+                const matchCat = selectedCat === 'ALL' || t.category === selectedCat;
+                return matchTab && matchCat;
+            });
+
+            // Sorting Logic:
+            // For active tasks: 1. Rollover items first, 2. Priority High -> Low, 3. Due Date Ascending
+            if (currentTab === 'active') {
+                displayList.sort((a, b) => {
+                    if (a.isRollover !== b.isRollover) {
+                        return a.isRollover ? -1 : 1; // Rollover items always on top
+                    }
+                    const priorityScore = { 'High': 3, 'Medium': 2, 'Low': 1 };
+                    if (priorityScore[b.priority] !== priorityScore[a.priority]) {
+                        return priorityScore[b.priority] - priorityScore[a.priority];
+                    }
+                    return new Date(a.dueDate) - new Date(b.dueDate);
+                });
+            } else {
+                // Completed tasks: sorted by completion time descending
+                displayList.sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
+            }
+
+            // Render Empty State if no tasks
+            if (displayList.length === 0) {
+                taskListContainer.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            // Generate HTML for Task Items
+            taskListContainer.innerHTML = displayList.map(item => {
+                const isOverdue = item.isRollover;
+                const formattedCompletedTime = item.completedAt ? new Date(item.completedAt).toLocaleString('zh-HK', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+                return `
+                <div class="group bg-white dark:bg-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm border ${isOverdue ? 'border-amber-400 dark:border-amber-600/70 bg-amber-50/20 dark:bg-amber-950/10' : 'border-slate-200 dark:border-slate-700'} hover:border-sky-300 dark:hover:border-sky-600 transition-all flex items-start justify-between gap-3">
+                    
+                    <div class="flex items-start gap-3 flex-1 min-w-0">
+                        <!-- Checkbox Button (Larger touch hit-area for mobile/tablet) -->
+                        <button onclick="toggleTaskComplete('${item.id}')" aria-label="標記完成狀態"
+                            class="p-1 -m-1 flex-shrink-0 flex items-center justify-center">
+                            <span class="w-6 h-6 sm:w-7 sm:h-7 rounded-lg border-2 ${item.isCompleted ? 'bg-sky-600 border-sky-600 text-white' : 'border-slate-300 dark:border-slate-600 hover:border-sky-500'} flex items-center justify-center transition">
+                                ${item.isCompleted ? '<i class="fa-solid fa-check text-xs"></i>' : ''}
+                            </span>
+                        </button>
+
+                        <!-- Task Title & Meta -->
+                        <div class="flex-1 min-w-0">
+                            <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+                                <!-- Rollover Badge -->
+                                ${isOverdue && !item.isCompleted ? `
+                                    <span class="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-md text-[11px] font-bold border border-amber-300 dark:border-amber-800">
+                                        <i class="fa-solid fa-clock-rotate-left"></i> 昨天順延
+                                    </span>
+                                ` : ''}
+
+                                ${getPriorityBadgeHtml(item.priority)}
+
+                                <!-- Category Badge -->
+                                <span class="bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-md text-[11px]">
+                                    ${item.category || '一般'}
+                                </span>
+                            </div>
+
+                            <!-- Title Text -->
+                            <h3 class="text-sm sm:text-base font-medium leading-snug ${item.isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'} break-words">
+                                ${escapeHtml(item.title)}
+                            </h3>
+
+                            <!-- Dates Info -->
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                                <span class="flex items-center gap-1">
+                                    <i class="fa-regular fa-calendar"></i> 到期: ${item.dueDate}
+                                </span>
+                                ${item.isCompleted ? `
+                                    <span class="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                        <i class="fa-regular fa-circle-check"></i> 完成於 ${formattedCompletedTime}
+                                    </span>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons (Always visible & easy to tap on touch screens) -->
+                    <div class="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition flex-shrink-0">
+                        <button onclick="deleteTask('${item.id}')" title="刪除任務" aria-label="刪除任務"
+                            class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-red-500 active:text-red-600 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 transition">
+                            <i class="fa-regular fa-trash-can text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // HTML Escape Helper
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;")
+                      .replace(/</g, "&lt;")
+                      .replace(/>/g, "&gt;")
+                      .replace(/"/g, "&quot;")
+                      .replace(/'/g, "&#039;");
+        }
+
+        // ==========================================
+        // AI Batch Task Extraction Logic
+        // ==========================================
+
+        function switchInputMode(mode) {
+            const singleForm = document.getElementById('todoForm');
+            const aiSection = document.getElementById('aiInputSection');
+            const modeSingleBtn = document.getElementById('modeSingleBtn');
+            const modeAiBtn = document.getElementById('modeAiBtn');
+
+            if (mode === 'single') {
+                singleForm.classList.remove('hidden');
+                aiSection.classList.add('hidden');
+                modeSingleBtn.className = "flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 rounded-lg bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-sm transition text-center";
+                modeAiBtn.className = "flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition flex items-center justify-center gap-1.5";
+            } else {
+                singleForm.classList.add('hidden');
+                aiSection.classList.remove('hidden');
+                modeAiBtn.className = "flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 rounded-lg bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm transition flex items-center justify-center gap-1.5";
+                modeSingleBtn.className = "flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition text-center";
+            }
+        }
+
+        async function analyzeTextWithAI() {
+            const rawText = document.getElementById('aiRawText').value.trim();
+            const statusMsg = document.getElementById('aiStatusMsg');
+            const analyzeBtn = document.getElementById('aiAnalyzeBtn');
+
+            if (!rawText) {
+                statusMsg.innerHTML = `<span class="text-red-500"><i class="fa-solid fa-circle-exclamation"></i> 請先輸入一段文字！</span>`;
+                return;
+            }
+
+            // Loading state
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> AI 分析中...`;
+            statusMsg.innerText = "正在拆解你的待辦事項，請稍候...";
+
+            const todayStr = getTodayFormatted();
+            const dayOfWeek = new Date().toLocaleDateString('zh-HK', { weekday: 'long' });
+
+            const systemPrompt = `你是一個專業的個人助理，負責從用戶輸入的一段自然語言（廣東話或書面語）中，提取出所有獨立的待辦事項。
+今天日期是：${todayStr}（${dayOfWeek}）。
+請根據上下文推算每件事的到期日（YYYY-MM-DD格式，如果無提及日期則預設為今天 ${todayStr}）、優先級（High, Medium, Low）以及分類（只能從以下五個選擇：'個人', '工作', '學習', '健康', '財務'）。
+請簡潔清晰地總結每項任務的標題。`;
+
+            const payload = {
+                contents: [{ parts: [{ text: rawText }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "ARRAY",
+                        items: {
+                            type: "OBJECT",
+                            properties: {
+                                title: { type: "STRING", description: "簡潔的任務標題" },
+                                dueDate: { type: "STRING", description: "YYYY-MM-DD 格式的到期日" },
+                                priority: { type: "STRING", enum: ["High", "Medium", "Low"] },
+                                category: { type: "STRING", enum: ["個人", "工作", "學習", "健康", "財務"] }
+                            },
+                            required: ["title", "dueDate", "priority", "category"]
+                        }
+                    }
+                }
+            };
+
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (jsonText) {
+                    const parsed = JSON.parse(jsonText);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        aiExtractedTasks = parsed.map((item, idx) => ({
+                            ...item,
+                            tempId: idx,
+                            selected: true // Default selected
+                        }));
+                        renderAiSuggestions();
+                        statusMsg.innerHTML = `<span class="text-emerald-600 dark:text-emerald-400"><i class="fa-solid fa-check-circle"></i> 成功識別出 ${parsed.length} 個待辦事項！</span>`;
+                    } else {
+                        statusMsg.innerHTML = `<span class="text-amber-600">未能從文字中識別出具體待辦事項，請嘗試寫得更具體。</span>`;
+                    }
+                } else {
+                    throw new Error("Invalid AI response");
+                }
+            } catch (error) {
+                statusMsg.innerHTML = `<span class="text-red-500"><i class="fa-solid fa-triangle-exclamation"></i> 分析失敗，請稍後再試。</span>`;
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> 開始分析事項`;
+            }
+        }
+
+        // Exponential Backoff Fetch Helper
+        async function fetchWithRetry(url, options, retries = 3, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const res = await fetch(url, options);
+                    if (res.ok) return res;
+                    if (res.status === 429 || res.status >= 500) {
+                        await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
+                        continue;
+                    }
+                    return res;
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                    await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
+                }
+            }
+        }
+
+        function renderAiSuggestions() {
+            const container = document.getElementById('aiPreviewContainer');
+            const list = document.getElementById('aiSuggestionsList');
+            container.classList.remove('hidden');
+
+            list.innerHTML = aiExtractedTasks.map((item, index) => `
+                <div onclick="toggleAiSuggestionItem(${index})" 
+                    class="cursor-pointer p-3.5 rounded-xl border transition flex items-start gap-3 active:scale-[0.99] ${item.selected ? 'bg-indigo-50/60 dark:bg-indigo-950/30 border-indigo-300 dark:border-indigo-700' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 opacity-60'}">
+                    <div class="w-6 h-6 mt-0.5 rounded-lg border flex items-center justify-center flex-shrink-0 ${item.selected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600'}">
+                        ${item.selected ? '<i class="fa-solid fa-check text-xs"></i>' : ''}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-slate-800 dark:text-slate-100 break-words leading-snug">${escapeHtml(item.title)}</p>
+                        <div class="flex flex-wrap items-center gap-1.5 mt-1.5 text-[11px]">
+                            ${getPriorityBadgeHtml(item.priority)}
+                            <span class="bg-slate-200/70 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded">${item.category}</span>
+                            <span class="text-slate-500 dark:text-slate-400"><i class="fa-regular fa-calendar"></i> ${item.dueDate}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            updateSelectedAiCount();
+        }
+
+        function toggleAiSuggestionItem(index) {
+            aiExtractedTasks[index].selected = !aiExtractedTasks[index].selected;
+            renderAiSuggestions();
+        }
+
+        function toggleAllAiSuggestions() {
+            const allSelected = aiExtractedTasks.every(item => item.selected);
+            aiExtractedTasks.forEach(item => item.selected = !allSelected);
+            renderAiSuggestions();
+        }
+
+        function updateSelectedAiCount() {
+            const count = aiExtractedTasks.filter(i => i.selected).length;
+            document.getElementById('selectedAiCount').innerText = count;
+        }
+
+        function cancelAiPreview() {
+            document.getElementById('aiPreviewContainer').classList.add('hidden');
+            aiExtractedTasks = [];
+        }
+
+        function confirmAiSuggestions() {
+            const selectedItems = aiExtractedTasks.filter(item => item.selected);
+            if (selectedItems.length === 0) return;
+
+            // Add selected items in reverse order so they keep original order at the top
+            selectedItems.reverse().forEach((item, idx) => {
+                todos.unshift({
+                    id: 'task_ai_' + Date.now() + '_' + idx,
+                    title: item.title,
+                    dueDate: item.dueDate || getTodayFormatted(),
+                    priority: item.priority || 'Medium',
+                    category: item.category || '個人',
+                    isCompleted: false,
+                    isRollover: false,
+                    createdAt: new Date().toISOString()
+                });
+            });
+
+            saveTodos();
+            render();
+
+            // Reset AI form
+            document.getElementById('aiRawText').value = '';
+            document.getElementById('aiStatusMsg').innerText = 'AI 會自動識別事項、推算日期及分類';
+            cancelAiPreview();
+            switchInputMode('single');
+        }
+    </script>
+</body>
+</html>
